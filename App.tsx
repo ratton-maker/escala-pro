@@ -1,7 +1,30 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Calendar as CalendarIcon, Wand2, RefreshCw, Eraser, Info, ArrowLeftRight, Cloud, CloudOff, Loader2, Clock, LogOut, FileSpreadsheet, FileText, RotateCcw } from 'lucide-react';
+import { 
+  Users, 
+  Calendar as CalendarIcon, 
+  Wand2, 
+  RefreshCw, 
+  Eraser, 
+  Info, 
+  ArrowLeftRight, 
+  Cloud, 
+  CloudOff, 
+  Loader2, 
+  Clock, 
+  LogOut, 
+  FileSpreadsheet, 
+  FileText, 
+  RotateCcw,
+  Filter,
+  LayoutGrid,
+  List,
+  Menu,
+  X
+} from 'lucide-react';
 
 import ScheduleGrid from './components/ScheduleGrid';
+import ScheduleAgendaView from './components/ScheduleAgendaView';
+import { EmployeeFilterMultiSelect } from './components/EmployeeFilterMultiSelect';
 import ShiftEditor from './components/ShiftEditor';
 import SwapControls from './components/SwapControls';
 import EmployeeManager from './components/EmployeeManager';
@@ -10,6 +33,7 @@ import DateNavigation from './components/DateNavigation';
 import GeneratorModal from './components/GeneratorModal';
 import Login from './components/Login';
 import HistoryModal from './components/HistoryModal';
+import DailyScheduleModal from './components/DailyScheduleModal';
 
 import { INITIAL_EMPLOYEES, SHIFT_TYPES } from './constants';
 import { Employee, ScheduleEntry, Selection, AppMode, ShiftType, ScheduleState } from './types';
@@ -97,7 +121,34 @@ const App: React.FC = () => {
   const [showShiftManager, setShowShiftManager] = useState(false);
   const [showGeneratorModal, setShowGeneratorModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showDailyModal, setShowDailyModal] = useState(false);
+  const [selectedDailyDate, setSelectedDailyDate] = useState(() => toISODate(new Date()));
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [clipboardDay, setClipboardDay] = useState<{ dateStr: string, entries: ScheduleEntry[] } | null>(null);
+
+  const handleOpenDailyReport = (dateStr?: string) => {
+    if (dateStr) {
+      setSelectedDailyDate(dateStr);
+    } else {
+      setSelectedDailyDate(toISODate(currentDate));
+    }
+    setShowDailyModal(true);
+  };
+
+  // Mobile / View Customization
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [scheduleViewMode, setScheduleViewMode] = useState<'grid' | 'agenda'>('grid');
+
+  const displayedEmployees = useMemo(() => {
+    if (selectedEmployeeIds.length === 0 || selectedEmployeeIds.length === employees.length) {
+      return employees;
+    }
+    if (selectedEmployeeIds.includes('__NONE__')) {
+      return [];
+    }
+    const set = new Set(selectedEmployeeIds);
+    return employees.filter(e => set.has(e.id));
+  }, [employees, selectedEmployeeIds]);
   
   // Track which months have changed to optimize cloud saves
   const dirtyMonthsRef = React.useRef<Set<string> | null>(new Set());
@@ -154,8 +205,8 @@ const App: React.FC = () => {
           setCloudStatus('connected');
           setHasLoadedCloudData(true);
         } catch (e) {
-          console.error("Failed to load from cloud", e);
-          setCloudStatus('error');
+          console.warn("Nuvem temporariamente inacessível. A carregar dados locais...", e);
+          setCloudStatus('offline');
           // Fallback to local
           loadLocal(mergeShifts);
         }
@@ -650,36 +701,64 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans">
       
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0 z-40 gap-4">
+      <header className="bg-white border-b border-slate-200 px-3 py-2 sm:px-6 sm:py-3 flex flex-col md:flex-row items-center justify-between shadow-xs flex-shrink-0 z-40 gap-2 sm:gap-4">
         
-        {/* Logo area */}
-        <div className="flex items-center gap-3 min-w-fit">
-          <div className="bg-indigo-600 p-2 rounded-lg text-white hidden md:block">
-            <CalendarIcon size={24} />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-none">Escala de Serviço</h1>
-            <div className="flex items-center gap-1.5">
-                <p className="text-[10px] text-slate-500 font-medium">Gestão de Serviço</p>
-                {/* Cloud Indicator */}
-                <div className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded-full" title={cloudStatus === 'connected' ? 'Sincronizado' : 'Não configurado'}>
-                    {isSaving ? (
-                        <RefreshCw size={10} className="animate-spin text-indigo-500" />
-                    ) : cloudStatus === 'connected' ? (
-                        <Cloud size={10} className="text-emerald-500" />
-                    ) : (
-                        <CloudOff size={10} className="text-slate-400" />
-                    )}
-                    <span className="text-[9px] font-bold text-slate-600">
-                        {isSaving ? 'A guardar...' : cloudStatus === 'connected' ? 'Online' : 'Offline'}
-                    </span>
-                </div>
+        {/* Top bar on mobile / Left area on desktop */}
+        <div className="w-full md:w-auto flex items-center justify-between gap-3 min-w-fit">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-indigo-600 p-1.5 sm:p-2 rounded-lg text-white">
+              <CalendarIcon size={20} className="sm:w-6 sm:h-6" />
             </div>
+            <div>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h1 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight leading-none">
+                  Escala de Serviço
+                </h1>
+                <span className="text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-200/60 rounded-md leading-none">
+                  v0.0.1
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-[10px] text-slate-500 font-medium hidden xs:inline">Gestão de Serviço</p>
+                  {/* Cloud Indicator */}
+                  <div className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded-full" title={cloudStatus === 'connected' ? 'Sincronizado' : 'Não configurado'}>
+                      {isSaving ? (
+                          <RefreshCw size={10} className="animate-spin text-indigo-500" />
+                      ) : cloudStatus === 'connected' ? (
+                          <Cloud size={10} className="text-emerald-500" />
+                      ) : (
+                          <CloudOff size={10} className="text-slate-400" />
+                      )}
+                      <span className="text-[9px] font-bold text-slate-600">
+                          {isSaving ? 'A guardar...' : cloudStatus === 'connected' ? 'Online' : 'Offline'}
+                      </span>
+                  </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile top action buttons (Gerar + Menu) */}
+          <div className="flex items-center gap-1.5 md:hidden">
+            <button 
+              onClick={() => setShowGeneratorModal(true)}
+              disabled={isGenerating}
+              className="flex items-center gap-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs active:scale-95 transition-all disabled:opacity-70"
+            >
+              {isGenerating ? <RefreshCw className="animate-spin" size={13} /> : <Wand2 size={13} />}
+              <span>Gerar</span>
+            </button>
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition border border-slate-200 active:scale-95"
+              title="Menu de Opções"
+            >
+              {showMobileMenu ? <X size={18} /> : <Menu size={18} />}
+            </button>
           </div>
         </div>
 
-        {/* Central Controls */}
-        <div className="flex items-center gap-4 flex-1 justify-center">
+        {/* Central Controls (Date Navigation) */}
+        <div className="w-full md:w-auto flex items-center justify-center">
             <DateNavigation 
               currentDate={currentDate} 
               onDateChange={setCurrentDate} 
@@ -694,8 +773,8 @@ const App: React.FC = () => {
             />
         </div>
 
-        {/* Right Controls */}
-        <div className="flex items-center gap-3">
+        {/* Desktop Right Controls */}
+        <div className="hidden md:flex items-center gap-3">
            
            <div className="flex bg-slate-50 rounded-lg p-0.5 border border-slate-200">
              <button 
@@ -715,6 +794,15 @@ const App: React.FC = () => {
                <Clock size={16} />
                <span className="hidden xl:inline">Turnos</span>
              </button>
+             <div className="w-px bg-slate-200 my-1"></div>
+             <button 
+               onClick={() => handleOpenDailyReport(toISODate(currentDate))}
+               className="flex items-center gap-2 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 px-3 py-2 rounded-md transition text-sm font-medium"
+               title="Consultar Escala de Serviço Diária (Folha Aprovada)"
+             >
+               <FileText size={16} />
+               <span className="hidden xl:inline">Folha Diária</span>
+             </button>
            </div>
 
            <div className="h-6 w-px bg-slate-200"></div>
@@ -722,20 +810,20 @@ const App: React.FC = () => {
            <div className="bg-slate-100 rounded-lg p-1 flex border border-slate-200">
              <button 
                 onClick={() => { setMode(AppMode.VIEW); setSelections([]); }}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${mode !== AppMode.SWAP ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${mode !== AppMode.SWAP ? 'bg-white shadow-xs text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
              >
                Editar
              </button>
              <button 
                 onClick={() => { setMode(AppMode.SWAP); setSelections([]); }}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${mode === AppMode.SWAP ? 'bg-indigo-600 shadow-sm text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${mode === AppMode.SWAP ? 'bg-indigo-600 shadow-xs text-white' : 'text-slate-500 hover:text-slate-700'}`}
              >
                <ArrowLeftRight size={14} />
                Trocas
              </button>
            </div>
 
-          <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+          <div className="h-6 w-px bg-slate-200 mx-1"></div>
           
           <div className="flex bg-slate-50 rounded-lg p-0.5 border border-slate-200">
              <button 
@@ -757,17 +845,17 @@ const App: React.FC = () => {
 
           <button 
             onClick={() => setShowHistoryModal(true)}
-            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition hidden sm:block"
+            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
             title="Ver Histórico"
           >
             <Clock size={20} />
           </button>
 
-          <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+          <div className="h-6 w-px bg-slate-200 mx-1"></div>
           
           <button 
             onClick={logout}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition hidden sm:block"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
             title="Sair"
           >
             <LogOut size={20} />
@@ -775,7 +863,7 @@ const App: React.FC = () => {
 
           <button 
             onClick={clearSchedule}
-            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition hidden sm:block"
+            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
             title="Limpar Escala (Cuidado!)"
           >
             <Eraser size={20} />
@@ -794,15 +882,14 @@ const App: React.FC = () => {
                         if (savedSch) setSchedule(JSON.parse(savedSch));
                         
                         alert("Dados locais recuperados com sucesso! A guardar na nuvem...");
-                        // Trigger save by updating state (useEffect will catch it)
                     } catch (e) {
                         alert("Erro ao recuperar dados locais.");
                         console.error(e);
                     }
                 }
             }}
-            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition hidden sm:block"
-            title="Recuperar Cópia Local (Use se os dados desaparecerem)"
+            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+            title="Recuperar Cópia Local"
           >
             <RotateCcw size={20} />
           </button>
@@ -818,39 +905,197 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {/* Mobile Drawer / Actions Menu */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 md:hidden flex flex-col justify-end">
+          <div className="bg-white rounded-t-2xl p-4 space-y-3 max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="font-bold text-slate-800 text-sm">Opções e Ferramentas</span>
+              <button 
+                onClick={() => setShowMobileMenu(false)}
+                className="p-1 hover:bg-slate-100 rounded-full text-slate-400"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mode Toggle in Mobile Drawer */}
+            <div className="bg-slate-100 rounded-lg p-1 flex border border-slate-200">
+              <button 
+                 onClick={() => { setMode(AppMode.VIEW); setSelections([]); setShowMobileMenu(false); }}
+                 className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${mode !== AppMode.SWAP ? 'bg-white shadow-xs text-indigo-600' : 'text-slate-500'}`}
+              >
+                Modo Editar
+              </button>
+              <button 
+                 onClick={() => { setMode(AppMode.SWAP); setSelections([]); setShowMobileMenu(false); }}
+                 className={`flex-1 py-2 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${mode === AppMode.SWAP ? 'bg-indigo-600 shadow-xs text-white' : 'text-slate-500'}`}
+              >
+                <ArrowLeftRight size={14} />
+                Modo Trocas
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button 
+                onClick={() => { handleOpenDailyReport(toISODate(currentDate)); setShowMobileMenu(false); }}
+                className="col-span-2 flex items-center gap-2 p-3 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/70 text-indigo-900 font-bold text-xs text-left shadow-xs"
+              >
+                <FileText size={16} className="text-indigo-600 shrink-0" />
+                <div className="flex flex-col">
+                  <span>Escala Diária (Folha Aprovada)</span>
+                  <span className="text-[10px] text-indigo-600/80 font-normal">Consulta oficial com formato de impressão</span>
+                </div>
+              </button>
+              <button 
+                onClick={() => { setShowEmployeeManager(true); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs text-left"
+              >
+                <Users size={16} className="text-indigo-600" />
+                <span>Gerir Equipa</span>
+              </button>
+              <button 
+                onClick={() => { setShowShiftManager(true); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs text-left"
+              >
+                <Clock size={16} className="text-indigo-600" />
+                <span>Gerir Turnos</span>
+              </button>
+              <button 
+                onClick={() => { handleExport('excel'); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 hover:bg-emerald-50 text-slate-700 font-semibold text-xs text-left"
+              >
+                <FileSpreadsheet size={16} className="text-emerald-600" />
+                <span>Exportar Excel</span>
+              </button>
+              <button 
+                onClick={() => { handleExport('pdf'); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 hover:bg-red-50 text-slate-700 font-semibold text-xs text-left"
+              >
+                <FileText size={16} className="text-red-600" />
+                <span>Exportar PDF</span>
+              </button>
+              <button 
+                onClick={() => { setShowHistoryModal(true); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs text-left"
+              >
+                <Clock size={16} className="text-slate-500" />
+                <span>Ver Histórico</span>
+              </button>
+              <button 
+                onClick={() => { logout(); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs text-left"
+              >
+                <LogOut size={16} className="text-slate-500" />
+                <span>Terminar Sessão</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden p-4 relative flex flex-col">
+      <main className="flex-1 overflow-hidden p-1.5 sm:p-4 relative flex flex-col">
         {cloudStatus === 'offline' && !isSaving && (
-             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs px-4 py-2 mb-2 rounded flex items-center gap-2">
-                <Info size={14} />
-                Atenção: A base de dados online não está configurada. As alterações estão a ser guardadas apenas neste computador. 
-                Edite o ficheiro <b>firebaseConfig.ts</b> para ativar a sincronização.
+             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs px-3 py-1.5 mb-1.5 rounded-lg flex items-center gap-2">
+                <Info size={14} className="shrink-0" />
+                <span className="text-[11px] sm:text-xs">
+                  Modo offline: Alterações guardadas apenas neste dispositivo.
+                </span>
              </div>
         )}
 
-        <div className="mb-2 px-1 text-sm text-slate-500 font-medium flex justify-between items-center">
-          <div>
+        {/* Mobile clipboard banner if a day was copied */}
+        {clipboardDay && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-1.5 mb-2 rounded-lg flex items-center justify-between shadow-xs">
+            <span className="font-medium text-[11px] sm:text-xs">
+              Escala de <b>{clipboardDay.dateStr}</b> copiada ({clipboardDay.entries.length} serviços). Toque em "Colar" no dia pretendido.
+            </span>
+            <button
+              onClick={() => setClipboardDay(null)}
+              className="text-emerald-700 hover:text-emerald-900 font-bold text-xs ml-2 px-1.5 py-0.5 rounded hover:bg-emerald-100"
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
+
+        {/* Toolbar: Info + Employee Filter + View Switcher */}
+        <div className="mb-2 px-1 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+          <div className="font-semibold text-slate-700 truncate">
             {viewMode === 'month' ? (
                 <>Visualizando: {currentDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' })}</>
             ) : (
                 <>Período: {new Date(customStartDate).toLocaleDateString('pt-PT')} a {new Date(customEndDate).toLocaleDateString('pt-PT')}</>
             )}
           </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
+            {/* Employee Filter (Multi-Select) */}
+            <EmployeeFilterMultiSelect
+              employees={employees}
+              selectedIds={selectedEmployeeIds}
+              onChange={setSelectedEmployeeIds}
+            />
+
+            {/* View Mode Switcher (Grid vs Agenda) */}
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                onClick={() => setScheduleViewMode('grid')}
+                className={`px-2 py-1 rounded text-xs font-bold flex items-center gap-1 transition-all ${
+                  scheduleViewMode === 'grid' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+                title="Vista Grelha (Tabela)"
+              >
+                <LayoutGrid size={13} />
+                <span className="hidden xs:inline">Grelha</span>
+              </button>
+              <button
+                onClick={() => setScheduleViewMode('agenda')}
+                className={`px-2 py-1 rounded text-xs font-bold flex items-center gap-1 transition-all ${
+                  scheduleViewMode === 'agenda' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+                title="Vista Agenda (Lista Móvel)"
+              >
+                <List size={13} />
+                <span className="hidden xs:inline">Agenda</span>
+              </button>
+            </div>
+          </div>
         </div>
 
+        {/* Schedule Display (Grid or Mobile Agenda) */}
         <div className="flex-1 overflow-hidden">
-          <ScheduleGrid 
-            days={displayedDays}
-            employees={employees}
-            shifts={shifts}
-            schedule={schedule}
-            selections={selections}
-            mode={mode}
-            onCellClick={handleCellClick}
-            onCopyDay={handleCopyDay}
-            onPasteDay={handlePasteDay}
-            clipboardDay={clipboardDay?.dateStr}
-          />
+          {scheduleViewMode === 'grid' ? (
+            <ScheduleGrid 
+              days={displayedDays}
+              employees={displayedEmployees}
+              shifts={shifts}
+              schedule={schedule}
+              selections={selections}
+              mode={mode}
+              onCellClick={handleCellClick}
+              onCopyDay={handleCopyDay}
+              onPasteDay={handlePasteDay}
+              clipboardDay={clipboardDay?.dateStr}
+              onOpenDailyReport={handleOpenDailyReport}
+            />
+          ) : (
+            <ScheduleAgendaView
+              days={displayedDays}
+              employees={employees}
+              shifts={shifts}
+              schedule={schedule}
+              selections={selections}
+              mode={mode}
+              selectedEmployeeIds={selectedEmployeeIds}
+              onCellClick={handleCellClick}
+              onCopyDay={handleCopyDay}
+              onPasteDay={handlePasteDay}
+              clipboardDay={clipboardDay?.dateStr}
+              onOpenDailyReport={handleOpenDailyReport}
+            />
+          )}
         </div>
 
         {/* Floating Controls */}
@@ -908,6 +1153,17 @@ const App: React.FC = () => {
 
         {showHistoryModal && (
             <HistoryModal onClose={() => setShowHistoryModal(false)} />
+        )}
+
+        {showDailyModal && (
+            <DailyScheduleModal
+                isOpen={showDailyModal}
+                onClose={() => setShowDailyModal(false)}
+                initialDate={selectedDailyDate}
+                employees={employees}
+                shifts={shifts}
+                schedule={schedule}
+            />
         )}
 
         {mode === AppMode.SWAP && selections.length < 2 && (

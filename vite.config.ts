@@ -15,7 +15,6 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       // This ensures process.env.API_KEY works in the browser code
-      'process.env.API_KEY': JSON.stringify(apiKey),
     },
   };
 });

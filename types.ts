@@ -3,6 +3,7 @@ export interface Employee {
   name: string;
   role: string;
   initials: string;
+  category?: string;
 }
 
 export interface ShiftType {

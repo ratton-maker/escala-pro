@@ -42,3 +42,36 @@ export const SHIFT_TYPES: ShiftType[] = [
   
   { id: 'folga_troca', code: 'FOLGA P/T', label: 'Folga por Troca', color: 'bg-gray-400', textColor: 'text-white', isOffDay: true },
 ];
+
+export const CATEGORY_OPTIONS = [
+  'Chefe Coordenador',
+  'Chefe',
+  'Agente Coordenador',
+  'Agente Principal',
+  'Agente'
+] as const;
+
+// Helper to determine or fallback employee rank category
+export const getEmployeeCategory = (emp: { name?: string; role?: string; initials?: string; category?: string; id?: string }): string => {
+  if (emp.category && emp.category.trim()) {
+    return emp.category.trim();
+  }
+  const role = (emp.role || '').toUpperCase();
+  const name = (emp.name || '').toUpperCase();
+  const id = (emp.id || '');
+
+  if (role.includes('CMDT') || role.includes('COMANDANTE') || name.includes('PAIS')) {
+    return 'Chefe Coordenador';
+  }
+  if (role.includes('SVISOR') || role.includes('SUPERVISOR') || role.includes('CHEFE') || name.includes('PISCO') || name.includes('ELZO')) {
+    return 'Chefe';
+  }
+  if (role.includes('COORDENADOR') || name.includes('MOREIRA')) {
+    return 'Agente Coordenador';
+  }
+  if (role.includes('AGENTE NOVO') || (id.length > 5 && id.startsWith('20'))) {
+    return 'Agente';
+  }
+  return 'Agente Principal';
+};
+
